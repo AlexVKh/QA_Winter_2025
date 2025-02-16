@@ -1,53 +1,76 @@
+import pytest
 import requests
 import random
-import pytest
 
-BASE_URL = "https://qa-internship.avito.com"
+BASE_URL = "https://qa-internship.avito.com/api/1"
 
 @pytest.fixture
-def unique_seller_id():
+def seller_id():
     return random.randint(111111, 999999)
 
 @pytest.fixture
-def test_advert(unique_seller_id):
-    payload = {
-        "title": "Test Advert",
-        "description": "Test Description",
+def item_payload(seller_id):
+    return {
+        "sellerID": seller_id,
+        "name": "Тестовый товар",
         "price": 100,
-        "seller_id": unique_seller_id
+        "statistics": {
+            "contacts": 5,
+            "likes": 10,
+            "viewCount": 20
+        }
     }
-    response = requests.post(f"{BASE_URL}/adverts", json=payload)
-    assert response.status_code == 201
-    return response.json()["id"], unique_seller_id
 
-def test_create_advert(unique_seller_id):
-    payload = {
-        "title": "Test Advert",
-        "description": "Test Description",
-        "price": 100,
-        "seller_id": unique_seller_id
-    }
-    response = requests.post(f"{BASE_URL}/adverts", json=payload)
-    assert response.status_code == 201
+@pytest.fixture
+def created_item(item_payload):
+    response = requests.post(f"{BASE_URL}/item", json=item_payload)
+    assert response.status_code == 200
+    return response.json()["id"]
+
+# Создания объявления
+def test_create_item_valid(item_payload):
+    response = requests.post(f"{BASE_URL}/item", json=item_payload)
+    assert response.status_code == 200
     assert "id" in response.json()
 
-def test_get_advert(test_advert):
-    advert_id, _ = test_advert
-    response = requests.get(f"{BASE_URL}/adverts/{advert_id}")
-    assert response.status_code == 200
-    assert response.json()["id"] == advert_id
+def test_create_item_without_seller():
+    payload = {"name": "Тест", "price": 100}
+    response = requests.post(f"{BASE_URL}/item", json=payload)
+    assert response.status_code == 400
 
-def test_get_adverts_by_seller(test_advert):
-    _, seller_id = test_advert
-    response = requests.get(f"{BASE_URL}/adverts?seller_id={seller_id}")
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)
+def test_create_item_invalid_seller():
+    payload = {"sellerID": 1000, "name": "Тест", "price": 100}
+    response = requests.post(f"{BASE_URL}/item", json=payload)
+    assert response.status_code == 400
 
-def test_get_stats(test_advert):
-    advert_id, _ = test_advert
-    response = requests.get(f"{BASE_URL}/stats/{advert_id}")
+def test_create_item_negative_price():
+    payload = {"sellerID": 123456, "name": "Тест", "price": -100}
+    response = requests.post(f"{BASE_URL}/item", json=payload)
+    assert response.status_code == 400
+
+# Получения объявления
+def test_get_existing_item(created_item):
+    response = requests.get(f"{BASE_URL}/item/{created_item}")
     assert response.status_code == 200
 
-def test_get_nonexistent_advert():
-    response = requests.get(f"{BASE_URL}/adverts/99999999")
+def test_get_non_existent_item():
+    response = requests.get(f"{BASE_URL}/item/00000000-0000-0000-0000-000000000000")
+    assert response.status_code == 404
+
+# Получения объявлений по sellerID
+def test_get_items_by_seller(seller_id):
+    response = requests.get(f"{BASE_URL}/{seller_id}/item")
+    assert response.status_code == 200
+
+def test_get_items_by_invalid_seller():
+    response = requests.get(f"{BASE_URL}/000000/item")
+    assert response.status_code == 400
+
+# Получение статистики
+def test_get_statistics_for_existing_item(created_item):
+    response = requests.get(f"{BASE_URL}/statistic/{created_item}")
+    assert response.status_code == 200
+
+def test_get_statistics_for_non_existent_item():
+    response = requests.get(f"{BASE_URL}/statistic/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
